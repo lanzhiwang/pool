@@ -65,5 +65,73 @@ class ApplyResult(object):
         self._callback = callback
         cache[self._job] = self
 
+========================================================================
+### 实现apply和map方法
+```bash
+lanzhiwang@lanzhiwang-dev2:~/rzx_project/cpython/Lib$ python -m multiprocessing.process_pool multiprocessing/process_pool.py
+12331
+12332
+<__main__.Pool object at 0x7f5f82dec4d0>
+=============================method __init__ in class ApplyResult 
+self._cond:  <Condition(<thread.lock object at 0x7f5f84b94390>, 0)> type: <class 'threading._Condition'>
+self._job:  0 type: <type 'int'>
+self._cache:  {0: <__main__.MapResult object at 0x7f5f82d91c90>} type: <type 'dict'>
+self._ready:  False type: <type 'bool'>
+self._callback:  None type: <type 'NoneType'>
+{0: <__main__.MapResult object at 0x7f5f82d91c90>}
+self._success:  True type: <type 'bool'>
+self._value:  [None, None, None, None, None, None, None, None, None, None] type: <type 'list'>
+self._chunksize:  2 type: <type 'int'>
+self._number_left:  5 type: <type 'int'>
+self._ready:  False type: <type 'bool'>
+(<generator object <genexpr> at 0x7f5f82d9c7d0>, None)
+<type 'tuple'>
+thread handle_tasks:  <generator object <genexpr> at 0x7f5f82d9c7d0> None
+enumerate thread handle_tasks:  0 (0, 0, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (0, 1)),), {})
+worker process:  (0, 0, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (0, 1)),), {})
+worker process:  (True, [0, 1])
+enumerate thread handle_tasks:  1 (0, 1, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (2, 3)),), {})
+worker process:  (0, 1, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (2, 3)),), {})
+worker process:  (True, [4, 9])
+enumerate thread handle_tasks:  2 (0, 2, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (4, 5)),), {})
+worker process:  (0, 2, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (4, 5)),), {})
+worker process:  (True, [16, 25])
+enumerate thread handle_tasks:  3 (0, 3, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (6, 7)),), {})
+worker process:  (0, 3, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (6, 7)),), {})
+worker process:  (True, [36, 49])
+enumerate thread handle_tasks:  4 (0, 4, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (8, 9)),), {})
+worker process:  (0, 4, <function mapstar at 0x7f5f84acb0c8>, ((<function sqr at 0x7f5f82deb9b0>, (8, 9)),), {})
+worker process:  (True, [64, 81])
+handle_results:  (0, 0, (True, [0, 1]))
+success:  True type: <type 'bool'>
+result:  [0, 1] type: <type 'list'>
+self._value:  [0, 1, None, None, None, None, None, None, None, None] type: <type 'list'>
+handle_results:  (0, 1, (True, [4, 9]))
+success:  True type: <type 'bool'>
+result:  [4, 9] type: <type 'list'>
+self._value:  [0, 1, 4, 9, None, None, None, None, None, None] type: <type 'list'>
+handle_results:  (0, 2, (True, [16, 25]))
+success:  True type: <type 'bool'>
+result:  [16, 25] type: <type 'list'>
+self._value:  [0, 1, 4, 9, 16, 25, None, None, None, None] type: <type 'list'>
+handle_results:  (0, 3, (True, [36, 49]))
+success:  True type: <type 'bool'>
+result:  [36, 49] type: <type 'list'>
+self._value:  [0, 1, 4, 9, 16, 25, 36, 49, None, None] type: <type 'list'>
+handle_results:  (0, 4, (True, [64, 81]))
+success:  True type: <type 'bool'>
+result:  [64, 81] type: <type 'list'>
+self._value:  [0, 1, 4, 9, 16, 25, 36, 49, 64, 81] type: <type 'list'>
+[0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+lanzhiwang@lanzhiwang-dev2:~/rzx_project/cpython/Lib$ 
+
+```
+
+
+
+
+
+
+
 
 ```

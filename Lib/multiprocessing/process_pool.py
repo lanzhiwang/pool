@@ -22,6 +22,8 @@ TERMINATE = 2
 
 job_counter = itertools.count()
 
+def mapstar(args):
+    return map(*args)
 
 def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None):
     """
@@ -38,11 +40,31 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None):
     if initializer is not None:
         initializer(*initargs)
 
-    task = inqueue.get()
-    print 'worker process: ', task  # (0, None, <function sqr at 0x7f8c0462e938>, (5,), {})
-    job, i, func, args, kwds = task
-    result = (True, func(*args, **kwds))
-    outqueue.put((job, i, result))
+    completed = 0
+    while maxtasks is None or (maxtasks and completed < maxtasks):
+        task = inqueue.get()
+        print 'worker process: ', task
+        """
+        apply
+        (0, None, <function sqr at 0x7ff5f6f999b0>, (5,), {})
+
+        map
+        (0, 1, <function mapstar at 0x7facbec610c8>, ((<function sqr at 0x7facbcf829b0>, (2, 3)),), {})
+        """
+        job, i, func, args, kwds = task
+        result = (True, func(*args, **kwds))
+        print 'worker process: ', result
+        """
+        apply
+        (True, 25)
+        (job, i, (True, 25))
+
+        map
+        (True, [4, 9])
+        (job, i, (True, [4, 9]))
+        """
+        outqueue.put((job, i, result))
+        completed += 1
 
 
 class Pool(object):
@@ -155,11 +177,56 @@ class Pool(object):
         args=(self._taskqueue, self._quick_put, self._outqueue,
               self._pool, self._cache)
         """
-        taskseq = taskqueue.get()
-        print 'thread handle_tasks: ', taskseq  # ([(0, None, <function sqr at 0x7f1fabd7c938>, (5,), {})], None)
-        task = taskseq[0][0]
-        print 'thread handle_tasks: ', task  # (0, None, <function sqr at 0x7f8aace37938>, (5,), {})
-        put(task)
+
+        """
+        apply task 结构
+        ([(0, None, <function sqr at 0x7f1fabd7c938>, (5,), {})], None)
+
+        map task 结构
+        (<generator object <genexpr> at 0x7fc0970d65f0>, None)
+        (0, 0, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (0, 1)),), {})
+        (0, 1, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (2, 3)),), {})
+        (0, 2, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (4, 5)),), {})
+        (0, 3, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (6, 7)),), {})
+        (0, 4, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (8, 9)),), {})
+
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]
+        [(function, (0, 1)), (function, (2, 3)), (function, (4, 5)), (function, (6, 7)), (function, (8, 9))]
+        [         0,                  1,                  2,                  3,                  4        ]
+
+        """
+
+        # taskseq = taskqueue.get()
+        # print 'thread handle_tasks: ', taskseq
+        # task = taskseq[0][0]
+        # print 'thread handle_tasks: ', task  # (0, None, <function sqr at 0x7f8aace37938>, (5,), {})
+        # put(task)
+
+        for taskseq, set_length in iter(taskqueue.get, None):
+            print 'thread handle_tasks: ', taskseq, set_length
+            """
+            apply
+            [(0, None, <function sqr at 0x7f59caab59b0>, (5,), {})] None
+
+            map
+            <generator object <genexpr> at 0x7ff856193870> None
+            """
+            for i, task in enumerate(taskseq):
+                print 'enumerate thread handle_tasks: ', i, task
+                """
+                apply
+                0 (0, None, <function sqr at 0x7f83e68279b0>, (5,), {})
+
+                map
+                0 (0, 0, <function mapstar at 0x7ff857ec20c8>, ((<function sqr at 0x7ff8561e39b0>, (0, 1)),), {})
+                1 (0, 1, <function mapstar at 0x7ff857ec20c8>, ((<function sqr at 0x7ff8561e39b0>, (2, 3)),), {})
+                2 (0, 2, <function mapstar at 0x7ff857ec20c8>, ((<function sqr at 0x7ff8561e39b0>, (4, 5)),), {})
+                3 (0, 3, <function mapstar at 0x7ff857ec20c8>, ((<function sqr at 0x7ff8561e39b0>, (6, 7)),), {})
+                4 (0, 4, <function mapstar at 0x7ff857ec20c8>, ((<function sqr at 0x7ff8561e39b0>, (8, 9)),), {})
+
+                """
+                put(task)
 
     @staticmethod
     def _handle_results(outqueue, get, cache):
@@ -170,10 +237,19 @@ class Pool(object):
 
         args=(self._outqueue, self._quick_get, self._cache)
         """
-        taskseq = outqueue.get()
-        print 'handle_results: ', taskseq  # (0, None, (True, 25))
-        job, i, obj = taskseq
-        cache[job]._set(i, obj)
+
+        while 1:
+            taskseq = outqueue.get()
+            print 'handle_results: ', taskseq
+            """
+            apply
+            (0, None, (True, 25))
+
+            map
+            (0, 1, (True, [4, 9]))
+            """
+            job, i, obj = taskseq
+            cache[job]._set(i, obj)
 
     def _repopulate_pool(self):
         """实例化 worker 进程
@@ -212,7 +288,11 @@ class Pool(object):
         return result
 
     def map(self, func, iterable, chunksize=None):
-        pass
+        '''
+        Equivalent of `map()` builtin
+        '''
+        assert self._state == RUN
+        return self.map_async(func, iterable, chunksize).get()
 
     def imap(self, func, iterable, chunksize=1):
         pass
@@ -235,7 +315,39 @@ class Pool(object):
         return result
 
     def map_async(self, func, iterable, chunksize=None, callback=None):
-        pass
+        '''
+        Asynchronous equivalent of `map()` builtin
+        '''
+        assert self._state == RUN
+        if not hasattr(iterable, '__len__'):
+            iterable = list(iterable)
+
+        if chunksize is None:
+            chunksize, extra = divmod(len(iterable), len(self._pool) * 4)
+            if extra:
+                chunksize += 1
+        if len(iterable) == 0:
+            chunksize = 0
+
+        task_batches = Pool._get_tasks(func, iterable, chunksize)
+        # print task_batches
+        result = MapResult(self._cache, chunksize, len(iterable), callback)
+        # generator_task = ((result._job, i, mapstar, (x,), {}) for i, x in enumerate(task_batches))
+        # for gene_task in generator_task:
+        #     print gene_task
+        #     """
+        #     (0, 0, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (0, 1)),), {})
+        #     (0, 1, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (2, 3)),), {})
+        #     (0, 2, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (4, 5)),), {})
+        #     (0, 3, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (6, 7)),), {})
+        #     (0, 4, <function mapstar at 0x7f6f718070c8>, ((<function sqr at 0x7f6f6fb289b0>, (8, 9)),), {})
+        #     """
+        task = (((result._job, i, mapstar, (x,), {}) for i, x in enumerate(task_batches)), None)
+        print task  # (<generator object <genexpr> at 0x7fc0970d65f0>, None)
+        print type(task)  # <type 'tuple'>
+        self._taskqueue.put(task)
+        return result
+
 
     def close(self):
         pass
@@ -245,6 +357,15 @@ class Pool(object):
 
     def join(self):
         pass
+
+    @staticmethod
+    def _get_tasks(func, it, size):
+        it = iter(it)
+        while 1:
+            x = tuple(itertools.islice(it, size))
+            if not x:
+                return
+            yield (func, x)
 
     def __reduce__(self):
         raise NotImplementedError(
@@ -302,13 +423,82 @@ class ApplyResult(object):
             self._cond.release()
         del self._cache[self._job]
 
+
+AsyncResult = ApplyResult       # create alias -- see #17805
+
+#
+# Class whose instances are returned by `Pool.map_async()`
+#
+
+class MapResult(ApplyResult):
+
+    def __init__(self, cache, chunksize, length, callback):
+        ApplyResult.__init__(self, cache, callback)
+        self._success = True
+        self._value = [None] * length
+        self._chunksize = chunksize
+        if chunksize <= 0:
+            self._number_left = 0
+            self._ready = True
+            del cache[self._job]
+        else:
+            self._number_left = length//chunksize + bool(length % chunksize)
+        print 'self._success:  {} type: {}' . format(self._success, type(self._success))
+        print 'self._value:  {} type: {}' . format(self._value, type(self._value))
+        print 'self._chunksize:  {} type: {}' . format(self._chunksize, type(self._chunksize))
+        print 'self._number_left:  {} type: {}' . format(self._number_left, type(self._number_left))
+        print 'self._ready:  {} type: {}' . format(self._ready, type(self._ready))
+        """
+        self._success:  True type: <type 'bool'>
+        self._value:  [None, None, None, None, None, None, None, None, None, None] type: <type 'list'>
+        self._chunksize:  2 type: <type 'int'>
+        self._number_left:  5 type: <type 'int'>
+        self._ready:  False type: <type 'bool'>
+        """
+
+    def _set(self, i, success_result):
+        success, result = success_result
+        print 'success:  {} type: {}' . format(success, type(success))
+        print 'result:  {} type: {}' . format(result, type(result))
+        """
+        success:  True type: <type 'bool'>
+        result:  [0, 1] type: <type 'list'>
+        """
+        if success:
+            self._value[i*self._chunksize:(i+1)*self._chunksize] = result
+            print 'self._value:  {} type: {}' . format(self._value, type(self._value))
+            # self._value:  [0, 1, None, None, None, None, None, None, None, None] type: <type 'list'>
+            self._number_left -= 1
+            if self._number_left == 0:
+                if self._callback:
+                    self._callback(self._value)
+                del self._cache[self._job]
+                self._cond.acquire()
+                try:
+                    self._ready = True
+                    self._cond.notify()
+                finally:
+                    self._cond.release()
+
+        else:
+            self._success = False
+            self._value = result
+            del self._cache[self._job]
+            self._cond.acquire()
+            try:
+                self._ready = True
+                self._cond.notify()
+            finally:
+                self._cond.release()
+
+
 def sqr(x, wait=0.0):
     time.sleep(wait)
     return x*x
 
-
 if __name__ == '__main__':
     p = Pool(2)
     print p
-    result = p.apply(sqr, (5,))
-    print result
+    # result = p.apply(sqr, (5,))
+    result = p.map(sqr, range(10))
+    print result  # [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
