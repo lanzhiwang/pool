@@ -211,6 +211,9 @@ class Pool(object):
 
             map
             <generator object <genexpr> at 0x7ff856193870> None
+
+            imap
+            <generator object <genexpr> at 0x7fc8683cf8c0> <bound method IMapIterator._set_length of <__main__.IMapIterator object at 0x7fc8683c1f10>>
             """
             for i, task in enumerate(taskseq):
                 print 'enumerate thread handle_tasks: ', i, task
@@ -225,8 +228,15 @@ class Pool(object):
                 3 (0, 3, <function mapstar at 0x7ff857ec20c8>, ((<function sqr at 0x7ff8561e39b0>, (6, 7)),), {})
                 4 (0, 4, <function mapstar at 0x7ff857ec20c8>, ((<function sqr at 0x7ff8561e39b0>, (8, 9)),), {})
 
+                imap
+                0 (0, 0, <function sqr at 0x7fc86841f9b0>, (0,), {})
+                1 (0, 1, <function sqr at 0x7fc86841f9b0>, (1,), {})
                 """
                 put(task)
+            else:
+                if set_length:
+                    print 'set_length thread handle_tasks: ', i  # 9
+                    set_length(i+1)
 
     @staticmethod
     def _handle_results(outqueue, get, cache):
@@ -247,6 +257,18 @@ class Pool(object):
 
             map
             (0, 1, (True, [4, 9]))
+
+            imap
+            (0, 0, (True, 0))
+            (0, 2, (True, 4))
+            (0, 1, (True, 1))
+            (0, 3, (True, 9))
+            (0, 5, (True, 25))
+            (0, 4, (True, 16))
+            (0, 6, (True, 36))
+            (0, 7, (True, 49))
+            (0, 8, (True, 64))
+            (0, 9, (True, 81))
             """
             job, i, obj = taskseq
             cache[job]._set(i, obj)
@@ -295,7 +317,45 @@ class Pool(object):
         return self.map_async(func, iterable, chunksize).get()
 
     def imap(self, func, iterable, chunksize=1):
-        pass
+        '''
+        Equivalent of `itertools.imap()` -- can be MUCH slower than `Pool.map()`
+        '''
+        assert self._state == RUN
+        if chunksize == 1:
+            result = IMapIterator(self._cache)
+            # generator_task = ((result._job, i, func, (x,), {}) for i, x in enumerate(iterable))
+            # for gene_task in generator_task:
+            #     print gene_task
+            #     """
+            #     (0, 0, <function sqr at 0x7ff37a4289b0>, (0,), {})
+            #     (0, 1, <function sqr at 0x7ff37a4289b0>, (1,), {})
+            #     (0, 2, <function sqr at 0x7ff37a4289b0>, (2,), {})
+            #     (0, 3, <function sqr at 0x7ff37a4289b0>, (3,), {})
+            #     (0, 4, <function sqr at 0x7ff37a4289b0>, (4,), {})
+            #     (0, 5, <function sqr at 0x7ff37a4289b0>, (5,), {})
+            #     (0, 6, <function sqr at 0x7ff37a4289b0>, (6,), {})
+            #     (0, 7, <function sqr at 0x7ff37a4289b0>, (7,), {})
+            #     (0, 8, <function sqr at 0x7ff37a4289b0>, (8,), {})
+            #     (0, 9, <function sqr at 0x7ff37a4289b0>, (9,), {})
+            #     """
+            task = (((result._job, i, func, (x,), {}) for i, x in enumerate(iterable)), result._set_length)
+            print task  # (<generator object <genexpr> at 0x7f2c7fd638c0>, <bound method IMapIterator._set_length of <__main__.IMapIterator object at 0x7f2c7fd55f10>>)
+            """
+            (
+            <generator object <genexpr> at 0x7f2c7fd638c0>,
+            <bound method IMapIterator._set_length of <__main__.IMapIterator object at 0x7f2c7fd55f10>>
+            )
+            """
+            print type(task)  # <type 'tuple'>
+            self._taskqueue.put(task)
+            return result
+        else:
+            assert chunksize > 1
+            task_batches = Pool._get_tasks(func, iterable, chunksize)
+            result = IMapIterator(self._cache)
+            self._taskqueue.put((((result._job, i, mapstar, (x,), {})
+                     for i, x in enumerate(task_batches)), result._set_length))
+            return (item for chunk in result for item in chunk)
 
     def imap_unordered(self, func, iterable, chunksize=1):
         pass
@@ -491,6 +551,106 @@ class MapResult(ApplyResult):
             finally:
                 self._cond.release()
 
+class IMapIterator(object):
+
+    def __init__(self, cache):
+        self._cond = threading.Condition(threading.Lock())
+        self._job = job_counter.next()
+        self._cache = cache
+        self._items = collections.deque()
+        self._index = 0
+        self._length = None
+        self._unsorted = {}
+        cache[self._job] = self
+        # print 'self._cond:  {} type: {}' . format(self._cond, type(self._cond))
+        # print 'self._job:  {} type: {}' . format(self._job, type(self._job))
+        # print 'self._cache:  {} type: {}' . format(self._cache, type(self._cache))
+        # print 'self._items:  {} type: {}' . format(self._items, type(self._items))
+        # print 'self._index:  {} type: {}' . format(self._index, type(self._index))
+        # print 'self._length:  {} type: {}' . format(self._length, type(self._length))
+        # print 'self._unsorted:  {} type: {}' . format(self._unsorted, type(self._unsorted))
+        # print cache
+        """
+        self._cond:  <Condition(<thread.lock object at 0x7fb628356390>, 0)> type: <class 'threading._Condition'>
+        self._job:  0 type: <type 'int'>
+        self._cache:  {0: <__main__.IMapIterator object at 0x7fb62656d0d0>} type: <type 'dict'>
+        self._items:  deque([]) type: <type 'collections.deque'>
+        self._index:  0 type: <type 'int'>
+        self._length:  None type: <type 'NoneType'>
+        self._unsorted:  {} type: <type 'dict'>
+        {0: <__main__.IMapIterator object at 0x7fb62656d0d0>}
+        """
+
+    def __iter__(self):
+        return self
+
+    def next(self, timeout=None):
+        self._cond.acquire()
+        try:
+            try:
+                item = self._items.popleft()
+            except IndexError:
+                if self._index == self._length:
+                    raise StopIteration
+                self._cond.wait(timeout)
+                try:
+                    item = self._items.popleft()
+                except IndexError:
+                    if self._index == self._length:
+                        raise StopIteration
+                    raise TimeoutError
+        finally:
+            self._cond.release()
+
+        success, value = item
+        if success:
+            return value
+        raise value
+
+    __next__ = next                    # XXX
+
+    def _set(self, i, obj):
+        """
+        0, (True, 0)
+        1, (True, 1)
+        2, (True, 4)
+        3, (True, 9)
+        5, (True, 25)
+        6, (True, 36)
+        4, (True, 16)
+        7, (True, 49)
+        8, (True, 64)
+        9, (True, 81)
+        """
+        self._cond.acquire()
+        try:
+            if self._index == i:
+                self._items.append(obj)
+                self._index += 1
+                while self._index in self._unsorted:
+                    obj = self._unsorted.pop(self._index)
+                    self._items.append(obj)
+                    self._index += 1
+                self._cond.notify()
+            else:
+                self._unsorted[i] = obj
+
+            if self._index == self._length:
+                del self._cache[self._job]
+        finally:
+            self._cond.release()
+
+    def _set_length(self, length):
+        print 'class IMapIterator _set_length:', length  # 10
+        self._cond.acquire()
+        try:
+            self._length = length
+            if self._index == self._length:
+                self._cond.notify()
+                del self._cache[self._job]
+        finally:
+            self._cond.release()
+
 
 def sqr(x, wait=0.0):
     time.sleep(wait)
@@ -500,5 +660,15 @@ if __name__ == '__main__':
     p = Pool(2)
     print p
     # result = p.apply(sqr, (5,))
-    result = p.map(sqr, range(10))
-    print result  # [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+    # result = p.map(sqr, range(10))
+    # print result  # [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+
+    it = p.imap(sqr, range(10))
+    print it  # <__main__.IMapIterator object at 0x7f901081f2d0>
+    print type(it)  # <class '__main__.IMapIterator'>
+    print list(it)  # [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+
+    """it = self.pool.imap(sqr, range(1000), chunksize=100)
+    for i in range(1000):
+        self.assertEqual(it.next(), i*i)
+    self.assertRaises(StopIteration, it.next)"""
